@@ -41,7 +41,7 @@ LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.7"
 # Configure and parse our command-line arguments
 def parse_args():
   parser = OptionParser(usage="spark-ec2 [options] <action> <cluster_name>"
-      + "\n\n<action> can be: launch, destroy, login, stop, start, get-master",
+      + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, pair",
       add_help_option=False)
   parser.add_option("-h", "--help", action="help",
                     help="Show this help message and exit")
@@ -577,6 +577,21 @@ def get_partition(total, num_partitions, current_partitions):
   return num_slaves_this_zone
 
 
+def my_ip():
+  response = urllib2.urlopen('http://whatismyip.akamai.com/')
+  return response.read()
+
+
+def pair(conn, cluster_name):
+  master_group_name = cluster_name + "-master"
+  groups = conn.get_all_security_groups()
+  master_group = [g for g in groups if g.name == master_group_name]
+  if len(master_group) > 0:
+    master_group[0].authorize('tcp', 7077, 7077, my_ip() + '/32')
+  else:
+    print "Master security group does not exist for this cluster. Please first create the cluster."
+
+
 def main():
   (opts, action, cluster_name) = parse_args()
   try:
@@ -715,6 +730,10 @@ def main():
           inst.start()
     wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, False)
+
+  elif action == "pair":
+    print "Pairing..."
+    pair(conn, cluster_name)
 
   else:
     print >> stderr, "Invalid action: %s" % action
